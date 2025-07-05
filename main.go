@@ -106,7 +106,17 @@ func (tm *TaskManager) loadTasks() error {
 			return err
 		}
 
-		task.CreatedAt, _ = time.Parse("2006-01-02 15:04:05", createdAt)
+		// Parse the SQLite datetime format
+		parsedTime, err := time.Parse("2006-01-02 15:04:05", createdAt)
+		if err != nil {
+			// Try alternative format with timezone
+			parsedTime, err = time.Parse("2006-01-02T15:04:05Z", createdAt)
+			if err != nil {
+				// Fallback to current time if parsing fails
+				parsedTime = time.Now()
+			}
+		}
+		task.CreatedAt = parsedTime
 
 		if parentID.Valid {
 			task.ParentID = new(int)
@@ -327,12 +337,12 @@ func (tm *TaskManager) render() {
 	width, height := termbox.Size()
 
 	// Header with better styling
-	header := "Task Manager - j/k: navigate, Shift+j: priority -1, Shift+k: priority +1, a: add, s: subtask, d: delete, e: edit, space: toggle, q: quit"
+	header := "Enfoque - j/k: navigate, Shift+j: priority -1, Shift+k: priority +1, a: add, s: subtask, d: delete, e: edit, space: toggle, q: quit"
 	for i, r := range header {
 		if i >= width {
 			break
 		}
-		termbox.SetCell(i, 0, r, termbox.ColorWhite|termbox.AttrBold, termbox.ColorBlue)
+		termbox.SetCell(i, 0, r, termbox.ColorYellow|termbox.AttrBold, termbox.ColorBlack)
 	}
 
 	// Status message with better contrast
@@ -439,7 +449,7 @@ func (tm *TaskManager) render() {
 			if i >= width {
 				break
 			}
-			termbox.SetCell(i, scrollY, r, termbox.ColorWhite, termbox.ColorBlue)
+			termbox.SetCell(i, scrollY, r, termbox.ColorCyan|termbox.AttrBold, termbox.ColorBlack)
 		}
 	}
 
@@ -493,7 +503,7 @@ func (tm *TaskManager) render() {
 			if i >= width {
 				break
 			}
-			termbox.SetCell(i, helpY, r, termbox.ColorWhite, termbox.ColorBlue)
+			termbox.SetCell(i, helpY, r, termbox.ColorCyan|termbox.AttrBold, termbox.ColorBlack)
 		}
 	}
 
