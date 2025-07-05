@@ -326,22 +326,22 @@ func (tm *TaskManager) render() {
 
 	width, height := termbox.Size()
 
-	// Header
+	// Header with better styling
 	header := "Task Manager - j/k: navigate, Shift+j: priority -1, Shift+k: priority +1, a: add, s: subtask, d: delete, e: edit, space: toggle, q: quit"
 	for i, r := range header {
 		if i >= width {
 			break
 		}
-		termbox.SetCell(i, 0, r, termbox.ColorYellow, termbox.ColorDefault)
+		termbox.SetCell(i, 0, r, termbox.ColorWhite|termbox.AttrBold, termbox.ColorBlue)
 	}
 
-	// Status message
+	// Status message with better contrast
 	if tm.statusMsg != "" {
 		for i, r := range tm.statusMsg {
 			if i >= width {
 				break
 			}
-			termbox.SetCell(i, 1, r, termbox.ColorGreen, termbox.ColorDefault)
+			termbox.SetCell(i, 1, r, termbox.ColorBlack, termbox.ColorGreen)
 		}
 	}
 
@@ -360,46 +360,78 @@ func (tm *TaskManager) render() {
 		task := tm.flatView[i]
 		y := startY + (i - startIdx)
 
+		// Improved highlighting with better contrast
 		bg := termbox.ColorDefault
 		fg := termbox.ColorDefault
 		if i == tm.currentIndex {
-			bg = termbox.ColorBlue
-			fg = termbox.ColorWhite
+			bg = termbox.ColorWhite
+			fg = termbox.ColorBlack | termbox.AttrBold
 		}
 
 		depth := tm.getTaskDepth(task)
 		indent := strings.Repeat("  ", depth)
 
+		// Better visual indicators
 		prefix := ""
 		if task.ParentID != nil {
-			prefix = "* "
+			prefix = "├─ "
 		}
 
 		expansion := ""
 		if len(task.Children) > 0 {
 			if task.IsExpanded {
-				expansion = "[-] "
+				expansion = "▼ "
 			} else {
-				expansion = "[+] "
+				expansion = "▶ "
 			}
 		}
 
 		timeAgo := formatDuration(time.Since(task.CreatedAt))
 
-		line := fmt.Sprintf("%s%s%s%s (P:%d, %s)",
-			indent, expansion, prefix, task.Title, task.Priority, timeAgo)
+		// Priority color coding for better visual hierarchy
+		priorityColor := termbox.ColorDefault
+		if task.Priority >= 80 {
+			priorityColor = termbox.ColorRed | termbox.AttrBold
+		} else if task.Priority >= 60 {
+			priorityColor = termbox.ColorYellow
+		} else if task.Priority <= 20 {
+			priorityColor = termbox.ColorBlue
+		}
 
+		// If this is the selected row, override priority color
+		if i == tm.currentIndex {
+			priorityColor = fg
+		}
+
+		// Clear the entire line first
 		for j := 0; j < width; j++ {
 			termbox.SetCell(j, y, ' ', fg, bg)
 		}
+
+		// Render the task line
+		line := fmt.Sprintf("%s%s%s%s", indent, expansion, prefix, task.Title)
 		for j, r := range line {
-			if j >= width {
+			if j >= width-25 { // Leave space for priority and time
 				break
 			}
 			termbox.SetCell(j, y, r, fg, bg)
 		}
+
+		// Render priority and time info on the right side
+		rightInfo := fmt.Sprintf("P:%d %s", task.Priority, timeAgo)
+		rightStart := width - len(rightInfo)
+		if rightStart > 0 {
+			for j, r := range rightInfo {
+				if j < 4 { // Priority part
+					termbox.SetCell(rightStart+j, y, r, priorityColor, bg)
+				} else { // Time part
+					termbox.SetCell(rightStart+j, y, r, termbox.ColorCyan, bg)
+				}
+			}
+		}
 	}
 
+	// Scroll indicator with better styling
 	if len(tm.flatView) > maxVisibleTasks {
 		scrollY := height - 1
 		scrollInfo := fmt.Sprintf("Showing %d-%d of %d tasks", startIdx+1, endIdx, len(tm.flatView))
@@ -407,11 +439,11 @@ func (tm *TaskManager) render() {
 			if i >= width {
 				break
 			}
-			termbox.SetCell(i, scrollY, r, termbox.ColorCyan, termbox.ColorDefault)
+			termbox.SetCell(i, scrollY, r, termbox.ColorWhite, termbox.ColorBlue)
 		}
 	}
 
-	// Edit mode or input mode
+	// Edit mode with better styling
 	if tm.editMode {
 		editY := height - 2
 		editPrompt := "Edit (title:priority): " + tm.editBuffer
@@ -419,7 +451,7 @@ func (tm *TaskManager) render() {
 			if i >= width {
 				break
 			}
-			termbox.SetCell(i, editY, r, termbox.ColorYellow, termbox.ColorDefault)
+			termbox.SetCell(i, editY, r, termbox.ColorBlack, termbox.ColorYellow)
 		}
 	} else if tm.inputMode != "" {
 		inputY := height - 3
@@ -448,10 +480,10 @@ func (tm *TaskManager) render() {
 			if i >= width {
 				break
 			}
-			termbox.SetCell(i, inputY, r, termbox.ColorYellow, termbox.ColorDefault)
+			termbox.SetCell(i, inputY, r, termbox.ColorBlack, termbox.ColorYellow)
 		}
 
-		// Help text
+		// Help text with better contrast
 		helpY := height - 2
 		helpText := "Press Enter to confirm, Esc to cancel"
 		for j := 0; j < width; j++ {
@@ -461,7 +493,7 @@ func (tm *TaskManager) render() {
 			if i >= width {
 				break
 			}
-			termbox.SetCell(i, helpY, r, termbox.ColorCyan, termbox.ColorDefault)
+			termbox.SetCell(i, helpY, r, termbox.ColorWhite, termbox.ColorBlue)
 		}
 	}
 
@@ -509,7 +541,7 @@ func (tm *TaskManager) handleNormalMode(ev termbox.Event) bool {
 	tm.statusMsg = ""
 
 	switch ev.Key {
-	case termbox.KeyEsc, termbox.KeyCtrlC:
+	case termbox.KeyCtrlC:
 		return true
 	case termbox.KeyCtrlD:
 		tm.scrollHalfPageDown()
