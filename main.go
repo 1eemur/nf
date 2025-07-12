@@ -34,10 +34,11 @@ type TaskManager struct {
 	editMode      bool
 	editBuffer    string
 	statusMsg     string
-	inputMode     string // "add", "addsubtask", "edit", ""
+	inputMode     string // "add", "addsubtask", "edit", "delete_confirm", ""
 	inputStep     int    // 0 = title, 1 = priority
 	inputTitle    string
 	inputPriority string
+	deleteTaskID  int // ID of task to be deleted
 }
 
 // NewTaskManager creates a new task manager instance
@@ -330,6 +331,16 @@ func (tm *TaskManager) getTaskDepth(task *Task) int {
 	return 0
 }
 
+// getTaskToDelete returns the task that would be deleted for confirmation
+func (tm *TaskManager) getTaskToDelete(taskID int) *Task {
+	for _, task := range tm.flatView {
+		if task.ID == taskID {
+			return task
+		}
+	}
+	return nil
+}
+
 // render renders the task list
 func (tm *TaskManager) render() {
 	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
@@ -480,30 +491,56 @@ func (tm *TaskManager) render() {
 			} else {
 				prompt = fmt.Sprintf("Add Subtask - Title: %s, Priority (1-100, default 50): %s", tm.inputTitle, tm.inputPriority)
 			}
+		case "delete_confirm":
+			taskToDelete := tm.getTaskToDelete(tm.deleteTaskID)
+			if taskToDelete != nil {
+				prompt = fmt.Sprintf("DELETE '%s' (ID: %d)? Press Enter to confirm, any other key to cancel", taskToDelete.Title, taskToDelete.ID)
+			} else {
+				prompt = "DELETE task? Press Enter to confirm, any other key to cancel"
+			}
 		}
 
 		// Clear the input line
 		for j := 0; j < width; j++ {
 			termbox.SetCell(j, inputY, ' ', termbox.ColorDefault, termbox.ColorDefault)
 		}
+
+		// Use red background for delete confirmation
+		bgColor := termbox.ColorYellow
+		if tm.inputMode == "delete_confirm" {
+			bgColor = termbox.ColorRed
+		}
+
 		for i, r := range prompt {
 			if i >= width {
 				break
 			}
-			termbox.SetCell(i, inputY, r, termbox.ColorBlack, termbox.ColorYellow)
+			termbox.SetCell(i, inputY, r, termbox.ColorBlack, bgColor)
 		}
 
 		// Help text with better contrast
 		helpY := height - 2
-		helpText := "Press Enter to confirm, Esc to cancel"
+		var helpText string
+		if tm.inputMode == "delete_confirm" {
+			helpText = "WARNING: This will delete the task and all its subtasks!"
+		} else {
+			helpText = "Press Enter to confirm, Esc to cancel"
+		}
+
 		for j := 0; j < width; j++ {
 			termbox.SetCell(j, helpY, ' ', termbox.ColorDefault, termbox.ColorDefault)
 		}
+
+		helpColor := termbox.ColorCyan | termbox.AttrBold
+		if tm.inputMode == "delete_confirm" {
+			helpColor = termbox.ColorRed | termbox.AttrBold
+		}
+
 		for i, r := range helpText {
 			if i >= width {
 				break
 			}
-			termbox.SetCell(i, helpY, r, termbox.ColorCyan|termbox.AttrBold, termbox.ColorBlack)
+			termbox.SetCell(i, helpY, r, helpColor, termbox.ColorBlack)
 		}
 	}
 
@@ -615,7 +652,8 @@ func (tm *TaskManager) handleNormalMode(ev termbox.Event) bool {
 	case 'd':
 		if len(tm.flatView) > 0 && tm.currentIndex < len(tm.flatView) {
 			task := tm.flatView[tm.currentIndex]
-			tm.deleteTask(task.ID)
+			tm.inputMode = "delete_confirm"
+			tm.deleteTaskID = task.ID
 		}
 	case 'e':
 		if len(tm.flatView) > 0 && tm.currentIndex < len(tm.flatView) {
@@ -629,6 +667,36 @@ func (tm *TaskManager) handleNormalMode(ev termbox.Event) bool {
 
 // handleInputMode handles input mode for adding tasks
 func (tm *TaskManager) handleInputMode(ev termbox.Event) bool {
+	switch tm.inputMode {
+	case "delete_confirm":
+		return tm.handleDeleteConfirmMode(ev)
+	default:
+		return tm.handleAddTaskMode(ev)
+	}
+}
+
+// handleDeleteConfirmMode handles the delete confirmation prompt
+func (tm *TaskManager) handleDeleteConfirmMode(ev termbox.Event) bool {
+	switch ev.Key {
+	case termbox.KeyEnter:
+		// Confirm deletion
+		err := tm.deleteTask(tm.deleteTaskID)
+		if err != nil {
+			tm.statusMsg = fmt.Sprintf("Error deleting task: %v", err)
+		}
+		tm.inputMode = ""
+		tm.deleteTaskID = 0
+	default:
+		// Any other key cancels deletion
+		tm.statusMsg = "Deletion cancelled"
+		tm.inputMode = ""
+		tm.deleteTaskID = 0
+	}
+	return false
+}
+
+// handleAddTaskMode handles input mode for adding tasks
+func (tm *TaskManager) handleAddTaskMode(ev termbox.Event) bool {
 	switch ev.Key {
 	case termbox.KeyEsc:
 		tm.inputMode = ""
