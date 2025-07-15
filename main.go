@@ -367,7 +367,7 @@ func (tm *TaskManager) render() {
 	}
 
 	// Tasks
-	startY := 3
+	startY := 2
 	_, height = termbox.Size()
 	maxVisibleTasks := height - startY - 1
 
